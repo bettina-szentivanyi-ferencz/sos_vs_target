@@ -1,0 +1,131 @@
+with
+	cte_dim_categ -- category dimension
+	as
+	(select distinct
+		'category' as type,
+		product_dim.category_id as id,
+		product_dim.category_name as name,
+		cast(null as bool) as own
+		from `trax-cpg-dwh-int.prod.product_dim` product_dim
+		where product_dim.project_name = 'straussfritolayil'
+	),
+	
+	cte_dim_subcateg -- subcategory dimension
+	as
+	(select distinct
+		'sub_category' as type,
+		product_dim.sub_category_id as id,
+		product_dim.sub_category_name as name,
+		cast(null as bool) as own
+		from `trax-cpg-dwh-int.prod.product_dim` product_dim
+		where product_dim.project_name = 'straussfritolayil'
+	),
+	
+	cte_dim_manuf -- manufacturer dimension
+	as
+	(select distinct
+		'manufacturer' as type,
+		product_dim.manufacturer_id as id,
+		product_dim.manufacturer_name as name,
+		product_dim.own
+		from `trax-cpg-dwh-int.prod.product_dim` product_dim
+		where product_dim.project_name = 'straussfritolayil'
+	),
+	
+	cte_dim_brand -- brand dimension
+	as
+	(select distinct
+		'brand' as type,
+		product_dim.brand_id as id,
+		product_dim.brand_name as name,
+		product_dim.own
+		from `trax-cpg-dwh-int.prod.product_dim` product_dim
+		where product_dim.project_name = 'straussfritolayil'
+	),
+	
+	cte_dim_numerator --dimension for numerator
+	as
+	(select * from cte_dim_categ
+	union all
+	select * from cte_dim_subcateg
+	union all
+	select * from cte_dim_manuf
+	union all
+	select * from cte_dim_brand
+	),
+	
+	cte_dim_denominator --dimension for denominator
+	as
+	(select * from cte_dim_categ
+	union all
+	select * from cte_dim_subcateg
+	union all
+	select * from cte_dim_manuf
+	union all
+	select * from cte_dim_brand
+	),
+	
+	cte_session_dim --session info
+	as
+	(select
+		session_dim.session_pk,
+		session_dim.session_explorer_url
+		from `trax-cpg-dwh-int.prod.session_dim` session_dim
+		where session_dim.project_name = 'straussfritolayil'
+		and session_dim.visit_date >= '2020-10-01'
+	),
+	
+	cte_kpiname -- list of system kpi names + displayed(client) kpi names ((placeholder))
+	as
+	(select distinct
+	kpi_fact.kpi_name,
+	kpi_fact.kpi_name as kpi_display_name --tbd
+	from `trax-cpg-dwh-int.prod.kpi_fact` kpi_fact
+	where 
+	kpi_fact.project_name = 'straussfritolayil'
+	and kpi_fact.kpi_name in ('LSOS Manufacturer out of Category')
+	and kpi_fact.visit_date >= '2020-10-01'
+	)
+	
+select -- fact table
+	kpi_fact.session_fk,
+	cte_session_dim.session_explorer_url,
+	kpi_fact.visit_date,
+	kpi_fact.store_fk,
+	kpi_fact.user_fk,
+	kpi_fact.user_fk || '_' || kpi_fact.store_fk as ownership_fk,
+	kpi_fact.kpi_id,
+	kpi_fact.kpi_name,
+	cte_kpiname.kpi_display_name,
+	kpi_fact.kpi_id || '_' || kpi_fact.numerator_type_name || '_' || kpi_fact.numerator_id || '_' || kpi_fact.denominator_type_name || '_' || kpi_fact.denominator_id as kpi_fk,
+	kpi_fact.numerator_type_name,
+	kpi_fact.numerator_id,
+	cte_dim_numerator.name as numerator_name,
+	cte_dim_numerator.own as numerator_own,
+	kpi_fact.denominator_type_name,
+	kpi_fact.denominator_id,
+	cte_dim_denominator.name as denominator_name,
+	cte_dim_denominator.own as denominator_own,
+	kpi_fact.numerator_result,
+	kpi_fact.denominator_result,
+	kpi_fact.result,
+	kpi_fact.target / 100 as target,
+	kpi_fact.denominator_result * (kpi_fact.target / 100) as target_value, --is this relevant?
+	kpi_fact.score,
+	kpi_fact.score_value,
+	case when kpi_fact.score_value = 'FAIL' then 1 end as count_fail,
+	case when kpi_fact.score_value = 'PASS' then 1 end as count_pass,
+	case when kpi_fact.score_value = 'NO TARGET' then 1 end as count_notarget
+	from `trax-cpg-dwh-int.prod.kpi_fact` kpi_fact
+	join cte_dim_numerator
+		on kpi_fact.numerator_id = cte_dim_numerator.id and kpi_fact.numerator_type_name = cte_dim_numerator.type
+	join cte_dim_denominator
+		on kpi_fact.denominator_id = cte_dim_denominator.id and kpi_fact.denominator_type_name = cte_dim_denominator.type
+	join cte_kpiname
+		on kpi_fact.kpi_name = cte_kpiname.kpi_name
+	join cte_session_dim
+		on kpi_fact.session_fk = cte_session_dim.session_pk
+	where 
+		kpi_fact.project_name = 'straussfritolayil'
+		and kpi_fact.kpi_name in ('LSOS Manufacturer out of Category')--, 'LSOS OWN Brand out of Category')
+		and kpi_fact.visit_date >= '2020-10-01'
