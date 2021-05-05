@@ -1,0 +1,66 @@
+SELECT
+'{project_name}' as project_name,
+case when ps.s_sales_rep_fk is null then -999 else ps.s_sales_rep_fk end as user_id,
+ps.store_fk as store_id,
+ps.store_uid,
+ps.pk as session_id,
+ps.session_uid,
+ps.visit_date,
+case when skl2.session_relevance is null then 0 else skl2.session_relevance end as session_relevance,
+case when skl2.scene_relevance is null then 0 else skl2.scene_relevance end as scene_relevance,
+case when skl2.live_session_relevance is null then 0 else skl2.live_session_relevance end as live_session_relevance,
+case when skl2.live_scene_relevance is null then 0 else skl2.live_scene_relevance end as live_scene_relevance,
+case when skl2.pk is null then -999 else skl2.pk end as kpi_pk,
+case when skl2.type is null then 'None' else skl2.type end as kpi_name,
+case when skl2.client_name is null then 'None' else skl2.client_name end as kpi_english_name,
+case when skl2.kpi_family_fk is null then -999 else skl2.kpi_family_fk end as kpi_family_fk,
+case when skf.name is null then 'None' else skf.name end as kpi_family_name,
+case when sretwn.entity_name is null then 'None' else sretwn.entity_name end as numerator_type_name,
+case when rkl2r.numerator_id is null then -999 else rkl2r.numerator_id end AS numerator_id,
+case when sretwn.entity_table_name is null or sretwn.entity_uid_field is null then 'None.None' else CONCAT(sretwn.entity_table_name,".", sretwn.entity_uid_field) end as numerator_path,
+case when sretwd.entity_name is null then 'None' else sretwd.entity_name end as denominator_type_name,
+case when rkl2r.denominator_id is null then -999 else rkl2r.denominator_id end as denominator_id,
+case when sretwd.entity_table_name is null or sretwd.entity_uid_field is null then 'None.None' else CONCAT(sretwd.entity_table_name,".",sretwd.entity_uid_field) end as denominator_path,
+case when sretwc.entity_name is null then 'None' else sretwc.entity_name end as context_id_type_name,
+case when rkl2r.context_id is null then -999 else rkl2r.context_id end as context_id,
+case when sretwc.entity_table_name is null or sretwc.entity_uid_field is null then 'None.None' else CONCAT(sretwc.entity_table_name,".",sretwc.entity_uid_field) end as context_path,
+case when rkl2r.result is null then -999.9 else rkl2r.result end as result,
+case when rkl2r.score is null then -999.9 else rkl2r.score end as score,
+case when rkl2r.numerator_result is null then -999 else rkl2r.numerator_result end as numerator_result,
+case when rkl2r.denominator_result is null then -999 else rkl2r.denominator_result end as denominator_result,
+case when rkl2r.weight is null then -999.9 else rkl2r.weight end as weight,
+case when rkl2r.target is null then -999.9 else rkl2r.target end as target,
+CASE WHEN sretwn.entity_name = 'product' AND rkl2r.result = 1
+	AND skl2.type IN (SELECT DISTINCT param_value FROM static.configuration_parameters WHERE param_name = 'mobile_reports_oos_reason')
+	AND oe.oos_message_fk IS NOT NULL THEN oe.oos_message_fk else -999 END AS oos_message_id,
+CASE WHEN sretwn.entity_name = 'product' AND rkl2r.result = 1
+	AND skl2.type IN (SELECT DISTINCT param_value FROM static.configuration_parameters WHERE param_name = 'mobile_reports_oos_reason')
+	AND om.message IS NOT NULL THEN om.message else 'None' END AS oos_message,
+CASE WHEN sretwn.entity_name = 'product' AND rkl2r.result = 1
+	AND skl2.type IN (SELECT DISTINCT param_value FROM static.configuration_parameters WHERE param_name = 'mobile_reports_oos_reason')
+	AND omt.description IS NOT NULL THEN omt.description else 'None' END AS oos_message_type,
+CASE WHEN rv.value  is null THEN 'None' else rv.value END as result_value,
+CASE WHEN rt.name  is null THEN 'None' else rt.name END as result_type,
+case when ksv.value is null then 'None' else ksv.value end as score_value,
+-999 as kpi_results_parent_fk,
+-999 AS kpi_results_pk,
+case when skl2.kpi_calculation_stage_fk is null then -999 else skl2.kpi_calculation_stage_fk end as kpi_calculation_stage_fk,
+case when skl2.initiated_by is null then 'None' else skl2.initiated_by end as initiated_by
+FROM report.kpi_level_2_results rkl2r
+LEFT JOIN probedata.session ps ON rkl2r.session_fk = ps.pk
+LEFT JOIN static.kpi_level_2 skl2 ON rkl2r.kpi_level_2_fk = skl2.pk
+LEFT JOIN static.kpi_family skf ON skl2.kpi_family_fk = skf.pk
+LEFT JOIN static.reports_entity_type_view sretwn ON skl2.numerator_type_fk = sretwn.entity_id
+LEFT JOIN static.reports_entity_type_view sretwd ON skl2.denominator_type_fk = sretwd.entity_id
+LEFT JOIN static.reports_entity_type_view sretwc ON skl2.context_type_fk = sretwc.entity_id
+LEFT JOIN probedata.oos_exclude oe ON ps.session_uid = oe.session_uid
+	AND rkl2r.numerator_id = oe.product_fk
+	AND oe.scene_uid IS NULL
+LEFT JOIN static.oos_message om ON om.pk = oe.oos_message_fk
+LEFT JOIN static.oos_message_type omt ON omt.pk = om.type
+LEFT JOIN static.kpi_result_value rv on rv.pk = rkl2r.result
+LEFT JOIN static.kpi_result_type rt on rt.pk = rv.kpi_result_type_fk
+left join static.kpi_result_value ksv on rkl2r.score=ksv.pk
+WHERE ps.delete_time IS NULL
+and ps.session_uid='c4715945-439a-4b47-a6d8-bb1d31bc3bb8'
+and skl2.type='LSOS Manufacturer out of Category'
